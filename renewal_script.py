@@ -8,6 +8,10 @@ import HTMLParser
 
 class Handler:
 
+    # The below needs to be set to ('library_number', 'email@address.co.uk', 'brighton')
+    USERS = [
+        ('', '', '')]
+
     def run(self):
         print ''
         for x in self.USERS:
@@ -94,8 +98,14 @@ class Get_Details:
             if x[0] == 'set-cookie':
                 the_cookie = x[1]
 
-        sort_account_page = SortAccountPageNew(the_cookie)
-        sort_account_page.feed(response.read())
+        try:
+            sort_account_page = SortAccountPageNew(the_cookie)
+            # Some of the HTML is invalid and therefore HTMLParser does not deal with it very well, so we replace it (it's missing a space between attributes):
+            for_feed = response.read().replace("title=\"Cookie Information\"target=\"_blank\"","title=\"Cookie Information\" target=\"_blank\"",1)
+            sort_account_page.feed(for_feed)
+            sort_account_page.close()
+        except HTMLParser.HTMLParseError as HTMLError:
+            print 'Problem Parsing get Book HTML Information'
         return sort_account_page.get_result_list()
 
 class SortAccountPageNew(HTMLParser.HTMLParser):
@@ -124,7 +134,7 @@ class SortAccountPageNew(HTMLParser.HTMLParser):
 		elif( attr[0] == 'method' and attr[1] == 'post' ):
                     found_method_post = 1
                 elif( attr[0] == 'action' and attr[1] == 'https://prism.talis.com/brighton-ac/account/loans' ):
-                     found_action_loans = 1
+                    found_action_loans = 1
             if( found_class_ajax == 1 and found_method_post == 1 and found_action_loans == 1 ):
                 self.foundtheform = 1
         elif( self.foundtheform == 1 ):
@@ -218,8 +228,14 @@ class ConfirmSuccessful:
         return self.deal_with_response(connection.getresponse())
 
     def deal_with_response(self, response) :
-        check_for_succeed = CheckForSucceed()
-        check_for_succeed.feed(response.read())
+        try:
+            check_for_succeed = CheckForSucceed()
+            # Some of the HTML is invalid and therefore HTMLParser does not deal with it very well, so we replace it (it's missing a space between attributes):
+            for_feed = response.read().replace("title=\"Cookie Information\"target=\"_blank\"","title=\"Cookie Information\" target=\"_blank\"",1)
+            check_for_succeed.feed(for_feed)
+            check_for_succeed.close()
+        except HTMLParser.HTMLParseError as HTMLError:
+            print 'Problem Parsing Renew Book HTML Information'
         return check_for_succeed.check_if_successful()
 
 class CheckForSucceed(HTMLParser.HTMLParser):
