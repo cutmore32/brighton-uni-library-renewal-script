@@ -3,11 +3,13 @@
 # must catch exceptions within here, so that errors can be reported to the user
 
 # limit on number of times a book can be renewed == 99
-# now need to update script to check date and therefore only renew if within two days....
+# now need to update script to check date and therefore only renew if within two days.... (DONE)
+# must have proper error checking so errors can be reported back to me within here! (it only takes one little change in their HTML and the whole thing can full over)
 
 import httplib
 import urllib
 import HTMLParser
+import datetime
 
 class Handler:
 
@@ -28,9 +30,11 @@ class Handler:
                 for y in the_result:
                     if( y[1] == 1 ):
                         renewed = '\033[94m' + 'Renewed' + '\033[0m'
+                    elif( y[1] == 2 ):
+                        renewed = '\033[93m' + 'Not Renewed, as not due until ' + DealWithDate.date_in_format(y[2]) + '\033[0m'
                     else:
-                        renewed = '\033[93m' + 'Not Renewed' + '\033[0m'
-                    due_date = 'Due: ' + y[2] + ' '
+                        renewed = '\033[91m' + 'Not Renewed - Unknown Reason' + '\033[0m'
+                    due_date = '\033[34m' + 'Due: ' + DealWithDate.date_in_format(y[2]) + ' ' + '\033[0m'
                     ready_for_print = 'Book: ' + y[0]
                     while len(ready_for_print) <= 90:
                         ready_for_print = ready_for_print + ' '
@@ -50,15 +54,17 @@ class RequestSession:
     BORROWERLOGINBUTTON = 'borrowLoginButton'
     LOGIN = 'Login'
     REFERER = 'referer'
-    REFERER_URL = 'https%3A%2F%2Fprism.talis.com%2Fbrighton-ac%2Faccount'
+    REFERER_URL1 = 'https%3A%2F%2Fprism.talis.com%2F'
+    REFERER_URL2 = '-ac%2Faccount'
 
     def __init__(self, library_number, uni) :
 
+        self.referer_url = self.REFERER_URL1 + uni + self.REFERER_URL2
         self.form_data = urllib.urlencode({
             self.BARCODE: library_number,
             self.INSTITUTIONID: '',
             self.BORROWERLOGINBUTTON: self.LOGIN,
-            self.REFERER: self.REFERER_URL})
+            self.REFERER: self.referer_url})
         self.path = self.PATH1 + uni + self.PATH2
         self.uni = uni
 
@@ -151,9 +157,12 @@ class SortAccountPageNewWithDate(HTMLParser.HTMLParser):
                         if( self.aftertheinput == 1 ):
                             for attr in attrs:
                                 if( attr[0] == 'title' ):
-                                    renew_the_book = RenewBookSession( self.the_cookie, self.lastbookid, self.uni )
-                                    the_result = renew_the_book.send_request()
-                                    self.the_result.append((attr[1][7:],the_result,self.due_date))
+                                    if(datetime.date.today()>=(self.due_date - datetime.timedelta(days=2))):
+                                        renew_the_book = RenewBookSession( self.the_cookie, self.lastbookid, self.uni )
+                                        the_result = renew_the_book.send_request()
+                                        self.the_result.append((attr[1][7:],the_result,self.due_date))
+                                    else:
+                                        self.the_result.append((attr[1][7:],2,self.due_date))
                                     self.due_date = None
                         else:
                             for attr in attrs:
@@ -194,7 +203,7 @@ class SortAccountPageNewWithDate(HTMLParser.HTMLParser):
 
     def handle_data(self, data):
         if self.found_due_date == 1:
-            self.due_date = data
+            self.due_date = DealWithDate.create_date_object(data)
 
     def handle_endtag(self, tag):
         if( tag == 'form' ):
@@ -210,6 +219,69 @@ class SortAccountPageNewWithDate(HTMLParser.HTMLParser):
 
     def get_result_list(self):
         return self.the_result
+
+class DealWithDate():
+
+    @staticmethod
+    def create_date_object(lib_date_value):
+        split_date = lib_date_value.split()
+
+        split_date[0] = split_date[0].replace('st','')
+        split_date[0] = split_date[0].replace('nd','')
+        split_date[0] = split_date[0].replace('rd','')
+        split_date[0] = split_date[0].replace('th','')
+        split_date[1] = split_date[1].upper()
+
+        if( split_date[1] == 'JANUARY' or split_date[1] == 'JAN' ):
+            split_date[1] = '1'
+        elif( split_date[1] == 'FEBRUARY' or split_date[1] == 'FEB' ):
+            split_date[1] = '2'
+        elif( split_date[1] == 'MARCH' or split_date[1] == 'MAR' ):
+            split_date[1] = '3'
+        elif( split_date[1] == 'APRIL' or split_date[1] == 'APR' ):
+            split_date[1] = '4'
+        elif( split_date[1] == 'MAY' ):
+            split_date[1] = '5'
+        elif( split_date[1] == 'JUNE' or split_date[1] == 'JUN' ):
+            split_date[1] = '6'
+        elif( split_date[1] == 'JULY' or split_date[1] == 'JUL' ):
+            split_date[1] = '7'
+        elif( split_date[1] == 'AUGUST' or split_date[1] == 'AUG' ):
+            split_date[1] = '8'
+        elif( split_date[1] == 'SEPTEMBER' or split_date[1] == 'SEP' ):
+            split_date[1] = '9'
+        elif( split_date[1] == 'OCTOBER' or split_date[1] == 'OCT' ):
+            split_date[1] = '10'
+        elif( split_date[1] == 'NOVEMBER' or split_date[1] == 'NOV' ):
+            split_date[1] = '11'
+        elif( split_date[1] == 'DECEMBER' or split_date[1] == 'DEC' ):
+            split_date[1] = '12'
+        else:
+            print 'Error'
+            # will need to throw custom date format error here
+
+        todays_date_information = str(datetime.date.today()).split('-')
+        if(int(split_date[1])<int(todays_date_information[1])):
+            year = int(todays_date_information[0]) + 1
+        else:
+            year = int(todays_date_information[0])
+
+        return datetime.date(year,int(split_date[1]),int(split_date[0]))
+
+    @staticmethod
+    def date_in_format(date_object):
+        the_day = date_object.day
+        if(the_day<10):
+            the_day_return = '0' + str(the_day)
+        else:
+            the_day_return = str(the_day)
+        the_month = date_object.month
+        if(the_month<10):
+            the_month_return = '0' + str(the_month)
+        else:
+            the_month_return = str(the_month)
+
+        return the_day_return + '/' + the_month_return + '/' + str(date_object.year)
 
 class RenewBookSession:
 
@@ -242,8 +314,6 @@ class RenewBookSession:
         connection = httplib.HTTPSConnection(self.HOST_NAME)
         connection.request('POST', self.path, self.form_data, self.headers)
         return self.deal_with_response(connection.getresponse())
-        #for testing
-        #return 1 
 
     def deal_with_response(self, response) :
         the_headers = response.getheaders()
@@ -273,7 +343,6 @@ class ConfirmSuccessful:
             self.HOST: self.HOST_NAME,
             self.ACCEPT_HEADER: self.ACCEPT,
             self.COOKIE_HEADER: cookie}
-
         self.location = location.replace('#loans','').replace('https://prism.talis.com','')
         self.uni = uni
 
