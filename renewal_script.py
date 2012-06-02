@@ -10,6 +10,10 @@ import httplib
 import urllib
 import HTMLParser
 import datetime
+import smtplib
+
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEText import MIMEText
 
 class Handler:
 
@@ -22,24 +26,68 @@ class Handler:
         for x in self.USERS:
             the_req = RequestSession(x[0],x[2])
             the_result = the_req.send_request()
+            email_part = EmailNotification(x[0],x[1],x[2],x[3],x[4])
             print x[1] + ' ' + x[2] + ' ' + x[0] + ':'
             print ''
             if( len(the_result) == 0 ):
                 print '\033[91m' + 'No Books to Renew' + '\033[0m'
+                email_part.addText('I have checked your library account and you currently have no books to renew<br />')
+                email_part.sendMail()
             else:
+                email_part.addText('I have done the following:<br /><br /><table style=\"border: 1px solid black;padding: 5px;\"><tr><th style=\"border: 1px solid black;padding: 5px;\">Book Name</th><th style=\"border: 1px solid black;padding: 5px;\">Due Date</th><th style=\"border: 1px solid black;padding: 5px;\">Action</th></tr>')
                 for y in the_result:
                     if( y[1] == 1 ):
                         renewed = '\033[94m' + 'Renewed' + '\033[0m'
+                        email_renewed = 'Renewed'
+                        background = 'green'
                     elif( y[1] == 2 ):
                         renewed = '\033[93m' + 'Not Renewed, as not due until ' + DealWithDate.date_in_format(y[2]) + '\033[0m'
+                        email_renewed = 'Not Renewed, not due until ' + DealWithDate.date_in_format(y[2])
+                        background = 'green'
                     else:
                         renewed = '\033[91m' + 'Not Renewed - Unknown Reason' + '\033[0m'
+                        email_renewed = 'Unable to Renew, please login to check.'
+                        background = 'red'
                     due_date = '\033[34m' + 'Due: ' + DealWithDate.date_in_format(y[2]) + ' ' + '\033[0m'
                     ready_for_print = 'Book: ' + y[0]
                     while len(ready_for_print) <= 90:
                         ready_for_print = ready_for_print + ' '
                     print due_date + ready_for_print + ' ' + renewed
+                    email_part.addText('<tr><td style=\"border: 1px solid black;padding: 5px;background-color: ' + background + ';color: white;\">' + y[0] + ' </td><td style=\"border: 1px solid black;padding: 5px;background-color: ' + background + ';color: white;\">' + DealWithDate.date_in_format(y[2]) + '</td><td style=\"border: 1px solid black;padding: 5px;background-color: ' + background + ';color: white;\">' + email_renewed + '</td></tr>')
+                email_part.addText('</table>')
+                email_part.sendMail()
             print ''
+
+class EmailNotification:
+
+    GMAILUSER = 'libraryrenewalscript@gmail.com'
+    GMAILPASSWORD = ''
+    MAILSERVERADDRESS = 'smtp.gmail.com'
+    MAILSERVERPORT = '587'
+
+    def __init__(self, library_id, recipient, uni, first_name, surname):
+        self.library_id = library_id
+        self.uni = uni
+        self.recipient = recipient
+        self.message = '<html>Dear ' + first_name + ' ' + surname + ',<br /><br />Regarding your University of ' + uni.capitalize() + ' library account number : ' + library_id + '.<br /><br />'
+
+    def addText(self, message):
+        self.message += message
+
+    def sendMail(self):
+        self.message += '<br />Kind Regards<br /><br />Library Renewal Bot</html>'
+        msg = MIMEMultipart()
+        msg['From'] = self.GMAILUSER
+        msg['To'] = self.recipient
+        msg['Subject'] = 'Library Renewal, library no: ' + self.library_id + ' ' + self.uni.capitalize() + ' account'
+        msg.attach(MIMEText(self.message,'html'))
+        mailServer = smtplib.SMTP(self.MAILSERVERADDRESS, self.MAILSERVERPORT)
+        mailServer.ehlo()
+        mailServer.starttls()
+        mailServer.ehlo()
+        mailServer.login(self.GMAILUSER, self.GMAILPASSWORD)
+        mailServer.sendmail(self.GMAILUSER, self.recipient, msg.as_string())
+        mailServer.close()
 
 class RequestSession:
 
